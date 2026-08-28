@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onyx-gate-obot"
+version = "0.1.0"
+description = "Onyx Gate for Obot — a verifiable authorization filter for the Obot MCP Gateway: policy-decided allow/deny on tool calls before they execute, with a re-checkable audit trail."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [{ name = "The Onyx Foundry", email = "contact@onyxfoundry.ai" }]
+keywords = ["obot", "mcp", "gateway", "agents", "authorization", "policy", "cedar", "guardrails", "audit"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security",
+]
+# Standard library only — the receiver adds no dependencies to your deployment.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+onyx-gate-obot = "onyx_gate_obot.server:main"
+
+[project.urls]
+Homepage = "https://onyxfoundry.ai"
+Repository = "https://github.com/jstewart-axyom/onyx-gate-obot"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
