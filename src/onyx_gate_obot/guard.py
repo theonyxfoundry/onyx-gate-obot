@@ -1,4 +1,4 @@
-# Vendored unchanged from onyx-gate-crewai v0.1.0 (github.com/jstewart-axyom/onyx-gate-crewai).
+# Vendored unchanged from onyx-gate-crewai v0.1.0 (github.com/theonyxfoundry/onyx-gate-crewai).
 # The client/guard core is framework-agnostic; a shared package may replace this copy.
 """Framework-agnostic tool-call guard.
 

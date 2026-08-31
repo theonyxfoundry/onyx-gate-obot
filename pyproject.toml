@@ -33,7 +33,7 @@ onyx-gate-obot = "onyx_gate_obot.server:main"
 
 [project.urls]
 Homepage = "https://onyxfoundry.ai"
-Repository = "https://github.com/jstewart-axyom/onyx-gate-obot"
+Repository = "https://github.com/theonyxfoundry/onyx-gate-obot"
 
 [tool.setuptools.packages.find]
 where = ["src"]

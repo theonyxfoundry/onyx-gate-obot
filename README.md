@@ -181,7 +181,7 @@ verification-first policy engine whose decision calculus is machine-checked in
 two independent proof assistants — currently in design-partner preview.
 
 The same engine gates agent frameworks directly — see
-[onyx-gate-crewai](https://github.com/jstewart-axyom/onyx-gate-crewai) (this
+[onyx-gate-crewai](https://github.com/theonyxfoundry/onyx-gate-crewai) (this
 receiver vendors the same framework-agnostic core).
 
 Running an MCP gateway in front of agents that touch money, records, or
