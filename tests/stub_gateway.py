@@ -26,9 +26,12 @@ class StubGateway:
         self,
         responder: Optional[Callable[[dict], tuple[int, dict]]] = None,
         require_bearer: Optional[str] = None,
+        ready_body: Optional[dict] = None,
     ) -> None:
         self.responder = responder or (lambda payload: (200, {"decision": "allow"}))
         self.require_bearer = require_bearer
+        # What GET /ready answers; the default is a pre-0.2.0 shape (no `server`).
+        self.ready_body = ready_body if ready_body is not None else {"policies": 1, "entities": 0}
         self.requests: list[dict] = []
         stub = self
 
@@ -63,6 +66,13 @@ class StubGateway:
                     self.send_response(200)
                     self.end_headers()
                     self.wfile.write(b"ok")
+                elif self.path == "/ready":
+                    data = json.dumps(stub.ready_body).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
                 else:
                     self.send_response(404)
                     self.end_headers()

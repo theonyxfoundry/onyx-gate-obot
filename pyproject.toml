@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "onyx-gate-obot"
-version = "0.1.0"
+version = "0.2.0"
 description = "Onyx Gate for Obot — a verifiable authorization filter for the Obot MCP Gateway: policy-decided allow/deny on tool calls before they execute, with a re-checkable audit trail."
 readme = "README.md"
 license = { text = "Apache-2.0" }

@@ -144,6 +144,7 @@ class ToolGuard:
         context: Optional[dict[str, Any]] = None,
         certify: bool = False,
         resource_type: str = "Tool",
+        check_version: bool = True,
     ) -> None:
         if mode not in (MODE_ENFORCE, MODE_OBSERVE):
             raise ValueError(f"mode must be 'enforce' or 'observe', got {mode!r}")
@@ -156,6 +157,10 @@ class ToolGuard:
         self.context = dict(context) if context else None
         self.certify = certify
         self.resource_type = resource_type
+        if check_version:
+            # Startup only, and never a refusal: a version skew is a RuntimeWarning
+            # (the gateway's product version from GET /ready vs this client's range).
+            self.gate.warn_if_unsupported()
 
     # -- messages --------------------------------------------------------
 
