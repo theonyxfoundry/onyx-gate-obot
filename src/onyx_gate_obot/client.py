@@ -30,11 +30,28 @@ import json
 import os
 import urllib.error
 import urllib.request
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 DEFAULT_URL = "http://127.0.0.1:8080"
 DEFAULT_TIMEOUT = 5.0
+
+# The Onyx gateway versions this client was written against. The gateway reports
+# its PRODUCT version as ``server.version`` on ``GET /ready`` (since Onyx 0.2.0).
+# The HTTP paths this client speaks are stable, so the check is SOFT: outside the
+# range a guard warns once at construction and keeps working — never a refusal.
+SUPPORTED_GATEWAY_MIN = (0, 2, 0)
+SUPPORTED_GATEWAY_BELOW = (1, 0, 0)
+
+
+def _parse_version(text: str) -> Optional[tuple[int, int, int]]:
+    """``"0.3.0"`` → ``(0, 3, 0)``; pre-release / build suffixes ignored; ``None`` if unparseable."""
+    core = text.split("+", 1)[0].split("-", 1)[0]
+    parts = core.split(".")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        return None
+    return (int(parts[0]), int(parts[1]), int(parts[2]))
 
 # Cedar Long is a signed 64-bit integer; anything outside is not representable.
 I64_MIN = -(2**63)
@@ -130,6 +147,48 @@ class OnyxGate:
             raise OnyxGateError(f"gateway request failed: {e}") from e
 
     # -- API -------------------------------------------------------------
+
+    # -- gateway version (a soft startup check) ----------------------------
+
+    def server_info(self) -> Optional[dict]:
+        """The gateway's identity from ``GET /ready`` — ``{"name", "version",
+        "commit"}`` — or ``None`` when it is unreachable or predates Onyx 0.2.0
+        (which introduced the ``server`` block)."""
+        try:
+            req = urllib.request.Request(self.url + "/ready")
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            return None
+        server = body.get("server") if isinstance(body, dict) else None
+        return server if isinstance(server, dict) else None
+
+    def gateway_version_warning(self) -> Optional[str]:
+        """One line when the gateway reports a product version outside
+        ``SUPPORTED_GATEWAY_MIN``..``SUPPORTED_GATEWAY_BELOW``; ``None`` when in
+        range, unknown, or unreachable. Decisions keep working either way."""
+        info = self.server_info()
+        if not info:
+            return None
+        version = str(info.get("version", ""))
+        parsed = _parse_version(version)
+        if parsed is None or SUPPORTED_GATEWAY_MIN <= parsed < SUPPORTED_GATEWAY_BELOW:
+            return None
+        lo = ".".join(map(str, SUPPORTED_GATEWAY_MIN))
+        hi = ".".join(map(str, SUPPORTED_GATEWAY_BELOW))
+        return (
+            f"onyx-gate-obot: the gateway at {self.url} reports Onyx {version} "
+            f"({info.get('name', 'eg_gateway')}); this client was written against "
+            f">={lo},<{hi}. Decisions still work over the stable HTTP paths, but "
+            "upgrade the client or the gateway so the two are tested together."
+        )
+
+    def warn_if_unsupported(self) -> Optional[str]:
+        """Emit :meth:`gateway_version_warning` as a :class:`RuntimeWarning`; returns it."""
+        message = self.gateway_version_warning()
+        if message:
+            warnings.warn(message, RuntimeWarning, stacklevel=2)
+        return message
 
     def health(self) -> bool:
         """True iff the gateway answers its ``/health`` endpoint."""
