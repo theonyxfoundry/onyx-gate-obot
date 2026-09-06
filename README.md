@@ -156,6 +156,39 @@ Pass `--certify` to the receiver and each decision additionally carries a
 kernel-re-checkable certificate (measured on the example: ~2–3 ms per decision
 instead of ~1 ms).
 
+## Decision receipts — no receipt, no action
+
+A gateway started with a decision key (`eg_gateway --receipt-key-file`) signs
+every decision on request: a small **receipt** saying which request (by
+canonical hash) was decided, which way, under which policy version, by which
+engine, and when — verifiable by anyone holding the gateway's public key, which
+it discloses on `GET /ready` as `receipt_key`. The gateway's hash-chained trail
+commits each receipt by hash, so a receipt in hand can later be bound to the
+exact record that recorded the decision (`eg_verify --audit-log … --receipt …`).
+
+The receiver can make that a **precondition of accepting** a tool call — the
+effector-side rule:
+
+```bash
+onyx-gate-obot --gateway-url http://127.0.0.1:8080 \
+               --secret-file webhook.secret \
+               --require-receipt-key gw.pub        # the gateway's .pub
+```
+
+With `--require-receipt-key`, a `tools/call` is accepted only when the
+gateway's allow came with a receipt that (1) verifies under that key, (2) says
+`allow`, and (3) is for exactly that call — the request hash is recomputed
+from the body the receiver sent, so a receipt for a different call, an edited
+receipt, a receipt under a rotated key, or no receipt at all rejects the call
+(HTTP 503: the gate could not prove its allow, which is not a policy deny)
+even though the gate said allow. Every accept then carries the receipt's id
+(`receipt:<kid>:<12 hex>`) in its body, naming the trail record it can be
+checked against. `--receipt` alone asks for receipts without enforcing. The
+verification is standard-library Python (the RFC 8032 algorithm, about 3 ms
+per receipt) and is pinned in the tests against receipts a real gateway
+signed, byte for byte with the engine's own canonical hashing
+(`onyx_gate_obot.receipt`, vendored from `onyx-gate-crewai`).
+
 ## Scope, honestly
 
 - **This is an authorization filter, not a sandbox.** It governs MCP tool
@@ -197,6 +230,10 @@ when a guard is built it reads the gateway's version once and emits a
 upgraded together. `ToolGuard(..., check_version=False)` skips the startup
 request; a gateway older than 0.2.0 reports no version and is treated as
 unknown (silent). `OnyxGate.server_info()` returns the block for your own logs.
+Receipts need a gateway with the receipts lane (after Onyx 0.3.1) started with
+a decision key — `receipt_key` on `GET /ready` shows whether it is on; a gateway
+without one answers `?receipt=true` with a plain decision, which
+`--require-receipt-key` then rejects.
 
 ## License
 
