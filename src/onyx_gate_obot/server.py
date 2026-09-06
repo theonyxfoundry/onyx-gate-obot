@@ -31,6 +31,7 @@ from typing import Optional
 from .client import OnyxGate
 from .filter import SIGNATURE_HEADER, FilterResponse, decide_message, verify_signature
 from .guard import ToolGuard
+from .receipt import read_public_key
 
 MAX_BODY_BYTES = 1_000_000  # a JSON-RPC tool call is small; refuse absurd bodies
 
@@ -144,6 +145,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         action="store_true",
         help="request a kernel-re-checkable certificate with each decision",
     )
+    parser.add_argument(
+        "--receipt",
+        action="store_true",
+        help="ask the gateway to sign each decision (a receipt id rides every accept)",
+    )
+    parser.add_argument(
+        "--require-receipt-key",
+        metavar="FILE",
+        help="the gateway's public decision key (its .pub, or receipt_key.public_key "
+        "from GET /ready): accept a tool call ONLY when the gateway's allow came "
+        "with a receipt that verifies under this key and is for exactly that call "
+        "— no receipt, no action (a missing/unacceptable receipt rejects 503)",
+    )
     args = parser.parse_args(argv)
 
     secret: Optional[str] = None
@@ -159,12 +173,26 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("the shared secret must be non-empty", file=sys.stderr)
         return 2
 
+    receipt_key: Optional[str] = None
+    if args.require_receipt_key:
+        try:
+            receipt_key = read_public_key(args.require_receipt_key)
+        except OSError as e:
+            print(f"cannot read --require-receipt-key: {e}", file=sys.stderr)
+            return 2
+        if len(receipt_key) != 64:
+            print("--require-receipt-key must hold a 64-hex Ed25519 public key", file=sys.stderr)
+            return 2
+
     gate = OnyxGate(args.gateway_url)
     guard = ToolGuard(
         gate,
         agent=args.agent,
         mode="observe" if args.observe else "enforce",
         certify=args.certify,
+        receipt=args.receipt,
+        require_receipt=receipt_key is not None,
+        receipt_public_key=receipt_key,
     )
     server = make_server(guard, secret, addr=args.addr, port=args.port, path=args.path)
 

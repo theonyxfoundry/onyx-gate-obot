@@ -105,3 +105,61 @@ def test_observe_mode_accepts_but_annotates_the_flagged_call():
         r = decide_message(tools_call("read_file", {"path": "/x"}), make_guard(stub, mode="observe"))
         assert r.status == 200
         assert "would have been DENIED" in r.body["advisory"]
+
+
+# -- receipts: no receipt, no action (opt-in) -----------------------------
+
+import json as _json
+import pathlib as _pathlib
+
+_FIXTURES = _pathlib.Path(__file__).parent / "fixtures"
+_PUB = (_FIXTURES / "gw.pub").read_text().strip()
+_ALLOW_RECEIPTED = _json.loads((_FIXTURES / "response_allow.json").read_text())
+
+
+def _receipted_call():
+    # The exact call the fixture gateway receipted (agent ap-clerk, context env=prod).
+    return tools_call("pay_invoice", {"vendor": "globex", "amount": 4800, "rush": True})
+
+
+def _receipted_guard(stub, **kwargs):
+    # The fixture gateway receipted agent "ap-clerk" with context env=prod.
+    return ToolGuard(
+        gate=OnyxGate(stub.url),
+        agent="ap-clerk",
+        context={"env": "prod"},
+        require_receipt=True,
+        receipt_public_key=_PUB,
+        check_version=False,
+        **kwargs,
+    )
+
+
+def test_receipted_accept_carries_the_receipt_id():
+    with StubGateway(lambda p: (200, _ALLOW_RECEIPTED)) as stub:
+        resp = decide_message(_receipted_call(), _receipted_guard(stub))
+    assert resp.accepted
+    assert resp.body["receipt"].startswith(f"receipt:{_ALLOW_RECEIPTED['receipt']['kid']}:")
+    assert stub.requests[0]["path"].endswith("?receipt=true")
+
+
+def test_require_receipt_rejects_503_when_the_allow_came_without_one():
+    with StubGateway(lambda p: (200, {"decision": "allow"})) as stub:
+        resp = decide_message(_receipted_call(), _receipted_guard(stub))
+    assert resp.status == 503, "not a policy deny: the gate could not prove its allow"
+    assert "no valid receipt" in resp.body["detail"]
+
+
+def test_require_receipt_rejects_a_receipt_for_another_call():
+    with StubGateway(lambda p: (200, _ALLOW_RECEIPTED)) as stub:
+        other = tools_call("pay_invoice", {"vendor": "globex", "amount": 4801, "rush": True})
+        resp = decide_message(other, _receipted_guard(stub))
+    assert resp.status == 503
+    assert "different request" in resp.body["detail"]
+
+
+def test_plain_accept_has_no_receipt_field():
+    with StubGateway(lambda p: ALLOW) as stub:
+        resp = decide_message(tools_call(), make_guard(stub, check_version=False))
+    assert resp.accepted and "receipt" not in resp.body
+

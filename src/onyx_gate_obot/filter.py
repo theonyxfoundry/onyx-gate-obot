@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from .guard import ToolGuard
+from .receipt import receipt_id
 
 SIGNATURE_HEADER = "X-Obot-Signature-256"
 
@@ -78,10 +79,16 @@ def decide_message(message: dict[str, Any], guard: ToolGuard) -> FilterResponse:
         body: dict[str, Any] = {"status": "accepted"}
         if result.advisory_note:
             body["advisory"] = result.advisory_note
+        if result.receipt:
+            # The gateway's signed receipt for this decision: its id here (the
+            # full receipt rides the guard result), so the accept can be traced
+            # to the trail record that commits it.
+            body["receipt"] = receipt_id(result.receipt)
         return FilterResponse(200, body)
 
-    # Blocked: an infrastructure failure (gateway unreachable) is 503, a real
-    # policy deny is 403 — both non-200, so Obot rejects either way, but the
-    # distinction keeps operator dashboards honest.
+    # Blocked: an infrastructure failure (gateway unreachable, or an allow that
+    # came without the receipt a `--require-receipt-key` receiver demands) is
+    # 503, a real policy deny is 403 — both non-200, so Obot rejects either way,
+    # but the distinction keeps operator dashboards honest.
     status = 503 if result.error else 403
     return FilterResponse(status, {"detail": result.blocked_message})

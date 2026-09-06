@@ -1,5 +1,5 @@
-# Vendored unchanged from onyx-gate-crewai v0.1.0 (github.com/theonyxfoundry/onyx-gate-crewai).
-# The client/guard core is framework-agnostic; a shared package may replace this copy.
+# Vendored unchanged from onyx-gate-crewai v0.3.0 (github.com/theonyxfoundry/onyx-gate-crewai).
+# The client/guard/receipt core is framework-agnostic; a shared package may replace this copy.
 """HTTP client for the Onyx gateway's tool-call decision endpoint.
 
 Standard library only (``urllib``) — the client adds no dependencies to the
@@ -21,7 +21,10 @@ Response::
     {"decision": "allow" | "deny",
      "explanation": "...",        # only on deny
      "certificate": {...},        # only with ?certify=true, best-effort
-     "policy_version": "..."}
+     "policy_version": "...",
+     "receipt": {...}}            # only with ?receipt=true, when the gateway holds a
+                                  # decision key — a signed per-decision receipt
+                                  # (see :mod:`.receipt`)
 """
 
 from __future__ import annotations
@@ -74,6 +77,10 @@ class GateDecision:
     explanation: Optional[str] = None
     certificate: Optional[dict] = None
     policy_version: Optional[str] = None
+    #: The signed per-decision receipt, when requested and issued (``?receipt=true``).
+    receipt: Optional[dict] = None
+    #: The request body exactly as sent — what a receipt's ``request_sha256`` is over.
+    request: dict = field(default_factory=dict, repr=False)
     raw: dict = field(default_factory=dict, repr=False)
 
     @property
@@ -208,8 +215,14 @@ class OnyxGate:
         resource_parents: Optional[list[str]] = None,
         context: Optional[dict[str, Any]] = None,
         certify: bool = False,
+        receipt: bool = False,
     ) -> GateDecision:
-        """Decide one tool call. Raises :class:`OnyxGateError` on any failure."""
+        """Decide one tool call. Raises :class:`OnyxGateError` on any failure.
+
+        ``receipt=True`` asks the gateway to sign the decision (``?receipt=true``);
+        the receipt comes back as :attr:`GateDecision.receipt` when the gateway
+        holds a decision key, else ``None`` — the decision itself is unaffected.
+        """
         _validate_uid_part("agent", agent)
         _validate_uid_part("tool", tool)
         if resource is None:
@@ -226,8 +239,9 @@ class OnyxGate:
         if context:
             payload["context"] = context
         path = "/gate/tool-call"
-        if certify:
-            path += "?certify=true"
+        query = [flag for flag, wanted in (("certify=true", certify), ("receipt=true", receipt)) if wanted]
+        if query:
+            path += "?" + "&".join(query)
         raw = self._post(path, payload)
         decision = raw.get("decision")
         if decision not in ("allow", "deny"):
@@ -237,5 +251,7 @@ class OnyxGate:
             explanation=raw.get("explanation"),
             certificate=raw.get("certificate"),
             policy_version=raw.get("policy_version"),
+            receipt=raw.get("receipt") if isinstance(raw.get("receipt"), dict) else None,
+            request=payload,
             raw=raw,
         )
